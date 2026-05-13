@@ -1,44 +1,51 @@
 package main
 
 import (
-	"encoding/json"
-	"log"
-	"net/http"
-	"time"
+"encoding/json"
+"log"
+"net/http"
+"time"
 
-	"github.com/gorilla/mux"
-	"github.com/rainbowmga/timetravel/api"
-	"github.com/rainbowmga/timetravel/service"
+"github.com/gorilla/mux"
+"github.com/rainbowmga/timetravel/api"
+"github.com/rainbowmga/timetravel/service"
 )
 
 // logError logs all non-nil errors
 func logError(err error) {
-	if err != nil {
-		log.Printf("error: %v", err)
-	}
+if err != nil {
+log.Printf("error: %v", err)
+}
 }
 
 func main() {
-	router := mux.NewRouter()
+router := mux.NewRouter()
 
-	service := service.NewInMemoryRecordService()
-	api := api.NewAPI(&service)
+// Persistent storage. The database file lives next to the binary by
+// default; on first run it will be created automatically.
+recordSvc, err := service.NewSQLiteRecordService("records.db")
+if err != nil {
+log.Fatalf("failed to initialize record store: %v", err)
+}
+defer func() { logError(recordSvc.Close()) }()
 
-	apiRoute := router.PathPrefix("/api/v1").Subrouter()
-	apiRoute.Path("/health").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		err := json.NewEncoder(w).Encode(map[string]bool{"ok": true})
-		logError(err)
-	})
-	api.CreateRoutes(apiRoute)
+apiHandler := api.NewAPI(recordSvc)
 
-	address := "127.0.0.1:8000"
-	srv := &http.Server{
-		Handler:      router,
-		Addr:         address,
-		WriteTimeout: 15 * time.Second,
-		ReadTimeout:  15 * time.Second,
-	}
+apiRoute := router.PathPrefix("/api/v1").Subrouter()
+apiRoute.Path("/health").HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+err := json.NewEncoder(w).Encode(map[string]bool{"ok": true})
+logError(err)
+})
+apiHandler.CreateRoutes(apiRoute)
 
-	log.Printf("listening on %s", address)
-	log.Fatal(srv.ListenAndServe())
+address := "127.0.0.1:8000"
+srv := &http.Server{
+Handler:      router,
+Addr:         address,
+WriteTimeout: 15 * time.Second,
+ReadTimeout:  15 * time.Second,
+}
+
+log.Printf("listening on %s", address)
+log.Fatal(srv.ListenAndServe())
 }
