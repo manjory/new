@@ -1,3 +1,66 @@
+## Implementation Notes
+
+### Objective 1 — SQLite persistence
+
+The in-memory store has been replaced with a SQLite-backed implementation
+(`service/SQLiteRecordService`). The database file `records.db` is created
+in the working directory on first run and survives server restarts.
+
+The driver is `github.com/mattn/go-sqlite3`, which requires CGo — a C
+compiler (gcc/clang on macOS/Linux, MSVC build tools on Windows) must be
+available at build time. A pure-Go alternative (`modernc.org/sqlite`) is a
+straightforward swap if a CGo-free build is preferred.
+
+### Objective 2 — Time travel / versioning
+
+V2 endpoints are mounted under `/api/v2` and provide read access to a
+record's full history. V1 endpoints remain byte-for-byte compatible: same
+routes, same request/response shapes, same status codes.
+
+Every write — whether it arrives via v1 or v2 — appends a row to the
+`record_versions` table inside the same transaction that updates the
+latest-state cache, so history can never diverge from the current state.
+
+#### New endpoints
+
+| Method | Path                                   | Description                              |
+|--------|----------------------------------------|------------------------------------------|
+| GET    | `/api/v2/records/{id}`                 | Latest version (with version + timestamp)|
+| GET    | `/api/v2/records/{id}/versions`        | List all versions of a record            |
+| GET    | `/api/v2/records/{id}/versions/{v}`    | Specific historical version              |
+| POST   | `/api/v2/records/{id}`                 | Create or update; returns new version    |
+
+#### Design choices
+
+- **Single SQLite file, two tables.** `records` holds the current state
+  (used by v1, unchanged). `record_versions` is an append-only history
+  table. Reaching for object storage (S3/blob) would be premature for
+  records this small; a relational schema also keeps the write path
+  transactional.
+- **Full snapshots per version, not diffs.** Reads at a point in time
+  become a single-row lookup. Storage cost is negligible at this scale;
+  diff compaction is a future optimization.
+- **Every write creates a version, even no-ops.** For an audit log, the
+  act of writing is itself signal — knowing a policyholder re-confirmed
+  data at a particular time is information. Skipping "identical" writes
+  also requires defining identical, which is its own can of worms.
+- **Interface segregation.** The v1 API package depends only on the
+  smaller `RecordService` interface and cannot accidentally call
+  versioning APIs. V2 depends on `VersionedRecordService`, which embeds
+  the former.
+
+#### What I would add next
+
+- **Bitemporal modeling.** The README example (a change in March that
+  isn't reported until July) hints at the distinction between *when we
+  learned it* and *when it actually became true*. The current schema
+  records only the former. A `valid_from` / `valid_to` pair would let
+  the system answer both "what did we know on date X" and "what was
+  the policy's actual state on date X."
+- **Attribution.** A `changed_by` column once auth is in place.
+- **Pagination on `/versions`.** Fine at current scale, but a long-lived
+  record could have thousands of versions.
+
 # Rainbow - Backend Take-Home Assignment
 
 Please create a private fork of this repo and complete the objectives.
