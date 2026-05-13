@@ -61,6 +61,9 @@ latest-state cache, so history can never diverge from the current state.
 - **Pagination on `/versions`.** Fine at current scale, but a long-lived
   record could have thousands of versions.
 
+*The remainder of this document is the original assignment README, kept verbatim for reference.*
+
+
 # Rainbow - Backend Take-Home Assignment
 
 Please create a private fork of this repo and complete the objectives.
