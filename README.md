@@ -11,6 +11,10 @@ compiler (gcc/clang on macOS/Linux, MSVC build tools on Windows) must be
 available at build time. A pure-Go alternative (`modernc.org/sqlite`) is a
 straightforward swap if a CGo-free build is preferred.
 
+#### How to run
+
+`Run with go run . from the project root. The server listens on 127.0.0.1:8000 and creates records.db on first start.`
+
 ### Objective 2 — Time travel / versioning
 
 V2 endpoints are mounted under `/api/v2` and provide read access to a
@@ -60,6 +64,17 @@ latest-state cache, so history can never diverge from the current state.
 - **Attribution.** A `changed_by` column once auth is in place.
 - **Pagination on `/versions`.** Fine at current scale, but a long-lived
   record could have thousands of versions.
+
+#### How to verify:
+# Create + update via v1 (versions get recorded silently)
+`curl -X POST localhost:8000/api/v1/records/1 -H 'Content-Type: application/json' -d '{"hello":"world"}'`
+`curl -X POST localhost:8000/api/v1/records/1 -H 'Content-Type: application/json' -d '{"hello":"world 2","status":"ok"}'`
+
+# Read via v2
+`curl localhost:8000/api/v2/records/1`           # latest
+`curl localhost:8000/api/v2/records/1/versions`  # full history
+`curl localhost:8000/api/v2/records/1/versions/1` # snapshot
+
 
 *The remainder of this document is the original assignment README, kept verbatim for reference.*
 
